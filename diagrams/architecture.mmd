@@ -1,0 +1,69 @@
+classDiagram
+    %% PawPal+ system architecture (canonical source — matches pawpal_system.py)
+    %%
+    %% Two layers:
+    %%   UI layer  (app.py, main.py) constructs Owner/Pet/Task and calls the Scheduler.
+    %%   Logic layer (pawpal_system.py) is the four classes below.
+    %% Ownership: Owner "1" -> "*" Pet "1" -> "*" Task. The Scheduler reads the
+    %% Owner to sort, filter, plan, detect conflicts, and handle recurrence.
+
+    class Task {
+        +str description
+        +int duration
+        +str priority
+        +str frequency
+        +str time
+        +date due_date
+        +bool completed
+        +str id
+        +priority_value() int
+        +mark_complete() void
+        +mark_incomplete() void
+        +is_recurring() bool
+        +next_occurrence() Task
+        +update(changes) void
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +str breed
+        +list~Task~ tasks
+        +add_task(task) Task
+        +find_task(task_id) Task
+        +edit_task(task_id, changes) Task
+        +remove_task(task_id) bool
+        +list_tasks() list~Task~
+        +pending_tasks() list~Task~
+    }
+
+    class Owner {
+        +str name
+        +int available_minutes
+        +dict preferences
+        +list~Pet~ pets
+        +add_pet(pet) Pet
+        +find_pet(name) Pet
+        +remove_pet(name) bool
+        +set_available_time(minutes) void
+        +set_preference(key, value) void
+        +all_tasks() list
+        +pending_tasks() list
+    }
+
+    class Scheduler {
+        +str strategy
+        +time day_start
+        +sort_tasks(pairs) list
+        +sort_by_time(tasks) list~Task~
+        +filter_tasks(owner, pet_name, completed) list~Task~
+        +build_plan(owner, available_minutes) dict
+        +detect_conflicts(owner) list~str~
+        +mark_task_complete(owner, task_id) Task
+        +format_plan(plan) str
+    }
+
+    Owner "1" --> "*" Pet : owns
+    Pet "1" --> "*" Task : has
+    Scheduler ..> Owner : reads
+    Scheduler ..> Task : sorts, plans & recurs
