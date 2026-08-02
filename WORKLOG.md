@@ -114,3 +114,27 @@ Focused on how the project is explained (for a future employer reading the GitHu
   clone path in the setup steps — the repo root *is* the project folder, so cloning gives
   `applied-ai-system-project/` directly (no nested subfolder).
 
+### 2026-08-02 — Reflection/ethics, execution evidence, and portfolio
+Wrapped up the final deliverables (the optional stretch features were skipped by request).
+
+- **`model_card.md`** (new, the responsible-AI reflection) with four clearly-labeled
+  sections: the system's limitations/biases, how it could be misused and the mitigations,
+  what surprised me while testing reliability, and my collaboration with AI — including one
+  genuinely **helpful** suggestion (use a free local model + fallback chain so it runs with
+  no paid key) and one **flawed** one (the AI first wrote a wrong clone path / a dead
+  model_card link, which I caught by checking the real repo layout).
+- **`demo_ai.py`** (new) — a small terminal demo of the RAG advisor that runs two live
+  scenarios and then forces the offline fallback, so the AI feature has a clean,
+  reproducible command a grader can run.
+- **README "Execution Evidence" section** (new) — real captured output for `pytest`
+  (21 passed), `python main.py` (the scheduler end-to-end), `python demo_ai.py` (RAG +
+  guardrail), and `pawpal.log` (the logging audit trail). This lets the project be graded
+  from text alone, without watching a video.
+- **`PORTFOLIO.md`** (new) — the portfolio artifact: the GitHub link plus a short
+  "what this project says about me as an AI engineer" reflection paragraph.
+- **`PRESENTATION_SCRIPT.md`** — a 5–7 minute speaker's guide drafted at your request, kept
+  **local only** (added to `.gitignore`) so it is not pushed to GitHub.
+
+**Verified:** all 21 tests still pass, and the execution evidence in the README is real
+output captured from live runs (Ollama serving `llama3.2`).
+

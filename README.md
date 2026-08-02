@@ -99,6 +99,7 @@ the offline fallback (no live model — weaker output, but never crashes).
 ```bash
 streamlit run app.py           # the web app
 python main.py                 # a terminal demo of the scheduler
+python demo_ai.py              # a terminal demo of the RAG advisor + guardrail
 python -m pytest               # the test suite (see Testing below)
 ```
 
@@ -208,6 +209,139 @@ behavior, not the prose.
 
 ---
 
+## 🧾 Execution Evidence (reproducible, no video needed)
+
+Real output captured by running the commands below. This demonstrates an end-to-end
+system run, the AI (RAG) feature, and the reliability/guardrail behavior — each with clear
+outputs. (Language-model wording varies between runs; the structure and grounding do not.)
+
+### ✅ Reliability — automated tests
+
+```text
+$ python -m pytest
+collected 21 items
+
+tests/test_pawpal.py .............                                       [ 61%]
+tests/test_pawpal_ai.py ........                                         [100%]
+
+============================== 21 passed in 0.03s ==============================
+```
+
+### ✅ End-to-end run — deterministic scheduler (`python main.py`)
+
+**Input:** owner "Sam", 120 min; two pets (Biscuit the dog, Whiskers the cat) with six
+tasks added out of time order, two of them booked at the same 07:30 slot.
+
+```text
+$ python main.py
+===========================================
+Today's Schedule for Sam  (budget: 120 min)
+===========================================
+  08:00-08:05  Feeding           5 min  [high  ] Whiskers
+  08:05-08:15  Feeding          10 min  [high  ] Biscuit
+  08:15-08:45  Morning walk     30 min  [high  ] Biscuit
+  08:45-08:55  Litter box       10 min  [medium] Whiskers
+  08:55-09:35  Grooming         40 min  [medium] Biscuit
+  09:35-10:00  Enrichment play  25 min  [low   ] Biscuit
+
+Total care time: 120 min
+Sorted 6 pending task(s) by priority. Scheduled 6 using 120 of 120 min; skipped 0 that did not fit.
+
+Agenda sorted by time
+---------------------
+  07:30  Feeding
+  07:30  Feeding
+  08:00  Morning walk
+  12:00  Grooming
+  17:00  Enrichment play
+  18:00  Litter box
+
+Conflict check
+--------------
+  ⚠️  Conflict at 07:30: Feeding (Biscuit), Feeding (Whiskers)
+
+Recurring tasks
+---------------
+  Before: Biscuit has 4 tasks; completing weekly 'Grooming'
+  After:  Biscuit has 5 tasks; next 'Grooming' due 2026-08-09
+```
+
+### ✅ AI feature (RAG) + guardrail (`python demo_ai.py`)
+
+Two live-model scenarios (retrieval → grounded generation), then the offline fallback
+guardrail with every live backend forced off.
+
+```text
+$ python demo_ai.py
+
+===== Scenario 1: dog, 45 minutes =====
+INPUT: Biscuit — dog Golden Retriever; 45 min available
+  task: Morning walk — 30 min, high priority, at 08:00, repeats daily
+  task: Feeding — 10 min, high priority, at 08:00, repeats daily
+  task: Grooming — 40 min, medium priority, at 12:00, repeats weekly
+BACKEND: ollama
+RETRIEVED GUIDELINES:
+  - general.md # Prioritizing when time is short
+  - dogs.md # Walking and exercise
+  - dogs.md # Feeding
+ADVICE:
+Given Biscuit's schedule and guidelines:
+* Prioritize feeding: Since it's a busy day, ensure Biscuit is fed first, at 08:00
+  (high priority task). This aligns with prioritizing health-critical tasks.
+* Adjust morning walk time: While Biscuit needs 30-60 minutes of walking per day, the
+  current 30-minute walk may not be sufficient. Consider adding a shorter play session
+  or short walk later in the day (enrichment and grooming can be shortened or shifted).
+* Toileting needs: prioritize a quick toileting break at 08:00 to meet daily needs.
+
+===== Scenario 2: cat, 60 minutes =====
+INPUT: Whiskers — cat Tabby; 60 min available
+  task: Litter box — 10 min, high priority, at 07:30, repeats daily
+  task: Play session — 15 min, low priority, at 18:00, repeats daily
+BACKEND: ollama
+RETRIEVED GUIDELINES:
+  - cats.md # Litter box care
+  - general.md # Prioritizing when time is short
+  - cats.md # Play and enrichment
+ADVICE:
+• High priority: Complete the litter box task at 07:30 (10 minutes). This is a critical
+  health-critical task that needs attention first.
+• Adapt play session: Shorten or adjust the 18:00 play session to fit your time.
+  Skipping it entirely would be detrimental (see "Prioritizing when time is short").
+• Enrichment and grooming can be shortened or shifted to another day without harm.
+
+===== Scenario 3: guardrail — no live model available =====
+BACKEND: offline
+RETRIEVED GUIDELINES:
+  - general.md # Prioritizing when time is short
+  - dogs.md # Walking and exercise
+  - dogs.md # Feeding
+ADVICE:
+⚠️ No live AI model is available, so here are the most relevant care guidelines
+retrieved for this pet (offline fallback):
+- Prioritizing when time is short — On a busy day, health-critical tasks come first:
+  feeding, any medication, and toileting needs (walks for dogs, litter for cats).
+- Walking and exercise — Most adult dogs need 30-60 minutes of walking per day...
+- Feeding — Adult dogs are usually fed twice a day on a consistent schedule.
+Prioritize feeding, medication, and toileting first when time is short.
+```
+
+### ✅ Reliability — logging / audit trail (`pawpal.log`)
+
+Every retrieval and backend choice is logged, including the fallback decision in Scenario 3:
+
+```text
+pawpal.ai INFO Loaded 15 knowledge chunk(s) from .../knowledge
+pawpal.ai INFO Retrieved 3/15 chunk(s) for query 'dog Golden Retriever ...':
+  ['general.md#Prioritizing when time is short (14)', 'dogs.md#Walking and exercise (8)', 'dogs.md#Feeding (8)']
+pawpal.ai INFO Ollama backend (llama3.2) answered (900 chars)
+pawpal.ai INFO Retrieved 3/15 chunk(s) for query 'cat Tabby ...':
+  ['cats.md#Litter box care (21)', 'general.md#Prioritizing when time is short (14)', 'cats.md#Play and enrichment (11)']
+pawpal.ai INFO Ollama backend (llama3.2) answered (778 chars)
+pawpal.ai INFO No live LLM backend answered; caller should use offline fallback
+```
+
+---
+
 ## 🪞 Reflection
 
 Building PawPal+ taught me that the hard part of an "AI system" is mostly *not* the model:
@@ -230,9 +364,12 @@ applied-ai-system-final/
 ├── pawpal_system.py     # deterministic scheduler (Owner / Pet / Task / Scheduler)
 ├── pawpal_ai.py         # RAG layer (Retriever, generate() fallback chain, PetCareAdvisor)
 ├── main.py              # terminal demo of the scheduler
+├── demo_ai.py           # terminal demo of the RAG advisor + offline guardrail
 ├── knowledge/           # the retrieval corpus: dogs.md, cats.md, general.md
 ├── tests/               # test_pawpal.py (13) + test_pawpal_ai.py (8)
 ├── diagrams/            # architecture.mmd (system flow) + uml_final.mmd (classes)
 ├── assets/              # architecture images
+├── model_card.md        # responsible-AI reflection
+├── PORTFOLIO.md         # portfolio artifact (GitHub link + reflection)
 └── requirements.txt
 ```
