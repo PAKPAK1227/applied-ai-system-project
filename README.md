@@ -33,6 +33,38 @@ PawPal+ pairs a plain-Python logic layer (`pawpal_system.py`) with a Streamlit U
 - **Daily & weekly recurrence** — completing a recurring task auto-creates its next occurrence with the correct next due date (`Task.next_occurrence()` + `Scheduler.mark_task_complete()`).
 - **Conflict warnings** — `Scheduler.detect_conflicts()` flags tasks booked at the same time and returns friendly warnings instead of crashing.
 
+## 🤖 AI Feature — RAG Pet-Care Advisor
+
+PawPal+ includes a **Retrieval-Augmented Generation (RAG)** advisor (`pawpal_ai.py`)
+that is fully integrated into the app: it looks up real pet-care guidelines *before*
+answering, then an AI model uses those retrieved guidelines — together with the pet's
+actual tasks and the owner's time budget — to write specific advice for the day.
+
+**How it works (retrieve → generate):**
+
+1. **Retrieve** — `Retriever` searches a local knowledge base of pet-care notes
+   (`knowledge/*.md`, chunked by section) and scores them by keyword overlap with the
+   pet in question. No API key or model is needed for this step.
+2. **Generate** — the retrieved guideline snippets plus a summary of the pet's current
+   schedule are sent to a language model, which produces advice **grounded in the
+   retrieved notes** (it uses them to reason, rather than printing them verbatim).
+
+**Runs for anyone — a 3-tier generator fallback chain** (`generate()`):
+
+| Order | Backend | When it's used |
+|-------|---------|----------------|
+| 1 | **Anthropic API** | if `ANTHROPIC_API_KEY` is set (and the `anthropic` package is installed) |
+| 2 | **Local Ollama** (`llama3.2`) | if an Ollama server is running locally — the default demo path, free and offline |
+| 3 | **Offline template** | guardrail: if no model is reachable, it still returns the retrieved guidelines instead of crashing |
+
+**Guardrails & logging:** every retrieval and backend attempt is written to `pawpal.log`
+(configured via `configure_logging()`). All model calls are wrapped in error handling with
+a timeout, so a missing/slow/failed model degrades to the offline fallback rather than
+erroring. The UI shows which backend answered and which guidelines were retrieved, so it's
+transparent that the advice is retrieval-grounded.
+
+See [`diagrams/architecture.mmd`](diagrams/architecture.mmd) for the full system data flow.
+
 ## Getting started
 
 ### Setup
@@ -42,6 +74,34 @@ python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+#### Enabling the AI advisor (choose one)
+
+The scheduler and the RAG **retrieval** step work with no extra setup. To get real AI
+**generation**, enable one backend (the app auto-detects whichever is available and falls
+back safely if none is):
+
+**Option A — Local model with Ollama (recommended, free, no API key):**
+
+```bash
+# macOS (Homebrew); see https://ollama.com for other platforms
+brew install ollama
+ollama serve &          # start the local model server
+ollama pull llama3.2    # one-time ~2 GB model download
+```
+
+**Option B — Anthropic API (optional, paid):**
+
+```bash
+pip install anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."   # billed separately from a Claude.ai subscription
+```
+
+**Option C — Nothing:** the advisor still runs and returns the retrieved guidelines via the
+offline fallback (no real model, weaker output).
+
+Optional environment variables: `PAWPAL_OLLAMA_MODEL` (default `llama3.2`), `OLLAMA_HOST`
+(default `http://localhost:11434`), `PAWPAL_ANTHROPIC_MODEL`, `PAWPAL_LLM_TIMEOUT`.
 
 ### Suggested workflow
 
@@ -82,7 +142,9 @@ Run the full suite from the project root:
 python -m pytest
 ```
 
-**What the tests cover** (`tests/test_pawpal.py`, 13 tests):
+**What the tests cover** (21 tests total):
+
+*Scheduler logic* (`tests/test_pawpal.py`, 13 tests):
 
 - **Task & pet basics** — marking a task complete flips its status; adding a task grows the pet's task list.
 - **Sorting** — `sort_by_time()` returns tasks in chronological `HH:MM` order and pushes unscheduled tasks last.
@@ -91,16 +153,24 @@ python -m pytest
 - **Conflict detection** — `detect_conflicts()` flags two tasks sharing a time slot and stays silent when times differ.
 - **Priority planning & edge cases** — `build_plan()` skips tasks that exceed the time budget, and an owner with no tasks produces an empty, non-crashing plan.
 
+*RAG advisor reliability* (`tests/test_pawpal_ai.py`, 8 tests) — these run offline with the
+model backends monkeypatched, so they need no API key or running model:
+
+- **Retrieval** — the knowledge base loads and chunks; a dog query ranks a dog guideline first and results are score-ordered; a query with no keyword overlap retrieves nothing (no false matches).
+- **Fallback chain** — `generate()` returns `None` when no live backend is available and prefers Anthropic over Ollama when both answer.
+- **Grounding & guardrail** — with no live model, the advice still surfaces the retrieved guideline headings (proving retrieval shapes the output); when a model answers, its text and the retrieved sources are returned; an advice request for a pet with no tasks never raises.
+
 Successful run:
 
 ```
 ============================= test session starts ==============================
 platform darwin -- Python 3.13.7, pytest-9.1.0, pluggy-1.6.0
-collected 13 items
+collected 21 items
 
-tests/test_pawpal.py .............                                       [100%]
+tests/test_pawpal.py .............                                       [ 61%]
+tests/test_pawpal_ai.py ........                                         [100%]
 
-============================== 13 passed in 0.05s ==============================
+============================== 21 passed in 0.05s ==============================
 ```
 
 **Confidence Level: ★★★★☆ (4/5)**

@@ -1,69 +1,71 @@
-classDiagram
-    %% PawPal+ system architecture (canonical source — matches pawpal_system.py)
-    %%
-    %% Two layers:
-    %%   UI layer  (app.py, main.py) constructs Owner/Pet/Task and calls the Scheduler.
-    %%   Logic layer (pawpal_system.py) is the four classes below.
-    %% Ownership: Owner "1" -> "*" Pet "1" -> "*" Task. The Scheduler reads the
-    %% Owner to sort, filter, plan, detect conflicts, and handle recurrence.
+flowchart TD
+    %% PawPal+ system architecture and data flow (input -> process -> output).
+    %% Shows the two subsystems (deterministic scheduler + RAG advisor), the
+    %% retriever/generator/fallback components, and where humans and tests check
+    %% the AI's output. The class-level design lives in diagrams/uml_final.mmd.
 
-    class Task {
-        +str description
-        +int duration
-        +str priority
-        +str frequency
-        +str time
-        +date due_date
-        +bool completed
-        +str id
-        +priority_value() int
-        +mark_complete() void
-        +mark_incomplete() void
-        +is_recurring() bool
-        +next_occurrence() Task
-        +update(changes) void
-    }
+    User([Pet owner]):::human
+    UI["Streamlit UI (app.py)<br/>owner, pets, tasks, time budget"]:::io
 
-    class Pet {
-        +str name
-        +str species
-        +str breed
-        +list~Task~ tasks
-        +add_task(task) Task
-        +find_task(task_id) Task
-        +edit_task(task_id, changes) Task
-        +remove_task(task_id) bool
-        +list_tasks() list~Task~
-        +pending_tasks() list~Task~
-    }
+    User -->|enters owner / pets / tasks / minutes| UI
 
-    class Owner {
-        +str name
-        +int available_minutes
-        +dict preferences
-        +list~Pet~ pets
-        +add_pet(pet) Pet
-        +find_pet(name) Pet
-        +remove_pet(name) bool
-        +set_available_time(minutes) void
-        +set_preference(key, value) void
-        +all_tasks() list
-        +pending_tasks() list
-    }
+    subgraph Scheduler["Deterministic Scheduler (pawpal_system.py)"]
+        direction TB
+        Plan["build_plan / sort_by_time / filter_tasks"]:::proc
+        Conflicts["detect_conflicts + recurrence"]:::proc
+    end
 
-    class Scheduler {
-        +str strategy
-        +time day_start
-        +sort_tasks(pairs) list
-        +sort_by_time(tasks) list~Task~
-        +filter_tasks(owner, pet_name, completed) list~Task~
-        +build_plan(owner, available_minutes) dict
-        +detect_conflicts(owner) list~str~
-        +mark_task_complete(owner, task_id) Task
-        +format_plan(plan) str
-    }
+    subgraph RAG["RAG Advisor (pawpal_ai.py)"]
+        direction TB
+        Query["Build query from pet + tasks"]:::proc
+        Retriever["Retriever<br/>keyword scoring"]:::proc
+        KB[("Knowledge base<br/>knowledge/*.md")]:::data
+        PromptB["Prompt builder<br/>retrieved notes + schedule"]:::proc
+        Gen{"Generator<br/>fallback chain"}:::decision
+        Anthropic["Anthropic API<br/>(if API key)"]:::model
+        Ollama["Local Ollama<br/>llama3.2"]:::model
+        Offline["Offline template<br/>(guardrail)"]:::model
 
-    Owner "1" --> "*" Pet : owns
-    Pet "1" --> "*" Task : has
-    Scheduler ..> Owner : reads
-    Scheduler ..> Task : sorts, plans & recurs
+        Query --> Retriever
+        Retriever -->|searches| KB
+        KB -->|top-k guideline chunks| PromptB
+        Query --> PromptB
+        PromptB --> Gen
+        Gen -->|1st| Anthropic
+        Gen -->|2nd| Ollama
+        Gen -->|fallback| Offline
+    end
+
+    UI -->|"Auto-fit plan"| Plan
+    UI -->|"Advise on pet"| Query
+
+    Plan --> PlanOut["Today's schedule + reasoning"]:::io
+    Conflicts --> PlanOut
+    Anthropic --> Advice["Grounded advice + sources + backend"]:::io
+    Ollama --> Advice
+    Offline --> Advice
+
+    PlanOut --> UI
+    Advice --> UI
+    UI -->|reviews plan & advice, decides what to do| User
+
+    Log[["pawpal.log<br/>retrieval + backend audit trail"]]:::log
+    RAG -.logs.-> Log
+
+    subgraph Testing["Automated tests (pytest)"]
+        direction TB
+        T1["Scheduler tests<br/>tests/test_pawpal.py"]:::test
+        T2["RAG reliability tests<br/>tests/test_pawpal_ai.py<br/>retrieval + fallback"]:::test
+    end
+
+    T1 -.verifies.-> Scheduler
+    T2 -.verifies.-> RAG
+
+    classDef human fill:#fde2c4,stroke:#b5651d,color:#000
+    classDef io fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef proc fill:#e5e7eb,stroke:#4b5563,color:#000
+    classDef data fill:#dcfce7,stroke:#16a34a,color:#000
+    classDef model fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef decision fill:#fef9c3,stroke:#ca8a04,color:#000
+    classDef test fill:#fee2e2,stroke:#dc2626,color:#000
+    classDef log fill:#f3f4f6,stroke:#6b7280,color:#000

@@ -47,3 +47,48 @@ automatically re-creates daily/weekly chores after you check them off.
 - Left the existing `diagrams/uml.mmd` (early draft) and `diagrams/uml_final.mmd`
   (final class diagram) in place for history.
 
+### 2026-08-02 — Added the AI feature: a RAG pet-care advisor
+This is the big one — it gives PawPal+ a real AI capability.
+
+**What we added, in plain terms:** a "PawPal Advisor" that gives smart, personalized
+pet-care advice. When you ask it about a pet, it first **looks things up** in a small
+library of real pet-care notes, then a **real AI model uses those notes** (plus your pet's
+actual tasks and how much time you have) to write advice for the day. That "look it up, then
+answer using what you found" pattern is called **RAG (Retrieval-Augmented Generation)** —
+the required advanced AI feature.
+
+**The pieces we built:**
+- **`knowledge/`** — the library the AI reads from: three markdown files of pet-care
+  guidelines (`dogs.md`, `cats.md`, `general.md`), split into labelled sections.
+- **`pawpal_ai.py`** — the AI layer, in three parts:
+  1. **Retriever** — searches the knowledge files and returns the few most relevant notes
+     for the pet in question (simple, transparent keyword matching — no API key needed).
+  2. **Generator** — sends the retrieved notes + the pet's schedule to a language model.
+     It tries three options in order so it works for anyone: **Anthropic API** (if a key is
+     set) → **free local Ollama model** (our demo path) → **offline template** (a safety net
+     that still shows the retrieved notes if no model is running).
+  3. **Advisor** — ties retrieval + generation together and returns the advice, which notes
+     it used, and which backend answered.
+- **`app.py`** — added a "🤖 PawPal Advisor" panel: pick a pet, click a button, read the
+  advice. It shows which model answered and (in an expander) which guidelines were used, so
+  it's clear the advice is grounded in real notes, not made up.
+- **Logging & guardrails** — every lookup and model call is written to `pawpal.log`, and all
+  model calls have timeouts + error handling so a missing/slow model never crashes the app.
+- **`tests/test_pawpal_ai.py`** — 8 new tests for the AI layer (retrieval accuracy, the
+  fallback chain, and safe/grounded behavior). They run offline, so no key or model needed.
+- **`diagrams/architecture.mmd`** — rewrote it as a **system data-flow diagram** (input →
+  process → output) showing the scheduler, the RAG retriever/generator/fallback, the log,
+  and where the human and the automated tests check the AI. The class diagram now lives in
+  `diagrams/uml_final.mmd`.
+- Docs updated: README (new "AI Feature" section + setup steps for Ollama/API + testing),
+  `reflection.md` (new section 6 on the RAG feature), `.gitignore` (ignore `pawpal.log`).
+
+**Setup we ran on this machine:** installed Ollama via Homebrew, started the local server,
+and pulled the `llama3.2` model (~2 GB). No API key or payment involved.
+
+**Verified:** all **21 tests pass** (`python3.13 -m pytest`), and a live end-to-end advisor
+call generated real, guideline-grounded advice through the local llama3.2 model.
+
+**Note for this machine:** run tests with **`python3.13`** — the bare `python3` here is a
+3.14 build without pytest installed.
+

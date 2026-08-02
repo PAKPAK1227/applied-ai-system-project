@@ -89,3 +89,40 @@ I'd make `build_plan` respect each task's set time instead of auto-sequencing fr
 **c. Key takeaway**
 
 Being the lead architect matters more than the code the AI writes. Small, verifiable increments and clear design calls kept the system coherent — the AI accelerated the work, but I owned the direction.
+
+---
+
+## 6. AI Feature — RAG Pet-Care Advisor
+
+**a. What it does**
+
+The AI feature is a Retrieval-Augmented Generation (RAG) advisor (`pawpal_ai.py`). When
+the owner asks for advice on a pet, it (1) **retrieves** the most relevant snippets from a
+local knowledge base of pet-care guidelines (`knowledge/*.md`), then (2) sends those
+snippets — plus a summary of the pet's real tasks and the owner's time budget — to a
+language model that **generates** advice grounded in the retrieved notes. It's integrated
+into the main app, not a standalone script: the retrieved guidelines and the live schedule
+actively shape the model's answer.
+
+**b. Design decisions and tradeoffs**
+
+- **Real model, no cloud lock-in.** The generator tries three backends in order —
+  Anthropic API → local Ollama (`llama3.2`) → offline template. The default demo path is a
+  free local model, so the project runs reproducibly for anyone with no API key or cost,
+  and upgrades to a hosted model by just setting a key (no code change).
+- **Keyword retrieval over embeddings.** I used a transparent bag-of-words overlap score
+  rather than a vector database. It's dependency-free, fast, easy to test, and easy to
+  explain — the right call for a small, well-tagged knowledge base.
+- **Fail safe, never crash.** Every model call is wrapped with a timeout and error handling.
+  If no model is reachable, the advisor still returns the retrieved guidelines (the offline
+  fallback), so the feature degrades gracefully instead of erroring.
+
+**c. Reliability and verification**
+
+Eight tests (`tests/test_pawpal_ai.py`) cover the parts that must stay correct: retrieval
+finds relevant guidelines and rejects no-overlap queries, the fallback chain picks the right
+backend, and the advisor stays grounded (offline advice still surfaces the retrieved
+headings) and never raises. The model backends are monkeypatched, so the tests run offline
+with no API key or running model. Every retrieval and backend choice is logged to
+`pawpal.log` for an audit trail. I verified the full path end-to-end against a live local
+Ollama model.
