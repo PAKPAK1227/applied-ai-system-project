@@ -92,3 +92,25 @@ call generated real, guideline-grounded advice through the local llama3.2 model.
 **Note for this machine:** run tests with **`python3.13`** — the bare `python3` here is a
 3.14 build without pytest installed.
 
+### 2026-08-02 — Documentation rewrite + reliability write-up
+Focused on how the project is explained (for a future employer reading the GitHub repo).
+
+- **Rewrote `README.md` as a clean portfolio document** with all eight required sections:
+  names PawPal+ as the original Modules 1–3 project (with a summary of its original goals),
+  title + summary, an architecture overview that explains the system diagram, step-by-step
+  setup, **3 real sample interactions** (two live-model outputs + one offline-fallback
+  output, captured by actually running the advisor), design decisions with trade-offs, a
+  testing & reliability summary, and a brief reflection. Dropped the old assignment-scaffold
+  language ("Your job is to…", "Suggested workflow").
+- **Reliability:** kept the existing approach (21 automated tests + `pawpal.log` logging +
+  error-handling/fallback guardrails) and summarized it clearly in the README, including
+  the honest one-line result and a "what worked / what didn't / what I learned" note. No
+  new reliability mechanism was needed — the requirement asks for at least one, and we have
+  three.
+- Noted that the graded responsible-AI reflection will live in `model_card.md` (Step 5),
+  not the README, so the reflection points are earned in the right place.
+- **Repo hygiene:** removed a stray committed `__pycache__/` from Git tracking (it was
+  already in `.gitignore`; it had been committed before that rule existed). Also fixed the
+  clone path in the setup steps — the repo root *is* the project folder, so cloning gives
+  `applied-ai-system-project/` directly (no nested subfolder).
+
